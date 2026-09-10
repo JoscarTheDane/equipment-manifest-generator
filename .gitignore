@@ -1,0 +1,16 @@
+# Secrets
+.api_key
+*.env
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Runtime state (per-deployment, never committed)
+hse/
+HSE/
+manifest_last_check.txt
+manifest-tracking.txt
+manifest_pending_approval.txt
+ACTIVATION_REGISTER.txt
