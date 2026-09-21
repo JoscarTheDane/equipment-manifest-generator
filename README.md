@@ -11,23 +11,37 @@ after explicit human approval — emails it back to the client.
 No VPS. No cloud storage. No database. Email is the transport, the queue,
 and the audit log.
 
+```mermaid
+flowchart TD
+    CL["client email<br/>subject: CREATE MANIFEST<br/>+ scope of work attached"] --> IN[("AgentMail inbox<br/>consultingsubsea@agentmail.to")]
+    IN --> T1["cron tick, every 2 hours<br/>local LLM on llama.cpp :8080"]
+
+    T1 --> S1["1 · read poll cursor<br/>first run seeds it and stops, no backlog replay"]
+    S1 --> S2["2 · list threads after the cursor"]
+    S2 --> S3{"3 · subject contains<br/>CREATE MANIFEST?"}
+    S3 -->|"no"| IGN["ignore — CREATE HIRA belongs<br/>to the sibling pipeline"]
+    S3 -->|"yes"| S4{"4 · message ID already in<br/>the tracking file?"}
+    S4 -->|"yes"| IGN2["skip, already processed"]
+    S4 -->|"no"| S5["5 · download attachments<br/>MCP get_attachment, then curl"]
+    S5 --> S6{"6 · is the content real<br/>subsea or diving scope?"}
+    S6 -->|"no"| BAIL["skip and log —<br/>never fabricate a manifest"]
+    S6 -->|"yes"| S7["7 · generate the manifest CSV<br/>Mode A named categories or Mode B from the SOW"]
+
+    S7 --> GATE["8 · post the draft and the CSV<br/>to the operator chat"]
+    GATE --> HUM{"operator replies<br/>APPROVE or REJECT"}
+    HUM -->|"APPROVE"| SEND["next tick sends the reply<br/>to the sender's from-field only<br/>CC technical"]
+    HUM -->|"REJECT, or silence"| HOLD["pending marker stays<br/>nothing is sent"]
+    SEND --> AUD["append the message ID to tracking<br/>write to ACTIVATION_REGISTER"]
+
+    style IN fill:#1f3a5f,color:#fff
+    style GATE fill:#5f3a1f,color:#fff
+    style HUM fill:#5f3a1f,color:#fff
+    style SEND fill:#1f5f3a,color:#fff
 ```
-client email "CREATE MANIFEST" + SOW attachments
-        │  (AgentMail inbox: consultingsubsea@agentmail.to)
-        ▼
-cron agent (every 2h, local LLM via llama.cpp :8080)
-  1. polls inbox (MCP list_threads, 'after' filter)
-  2. dedupes against tracking file (email = database)
-  3. downloads attachments via MCP get_attachment → curl
-  4. validates content is real subsea/diving scope (safety gate)
-  5. generates manifest CSV (raw, Excel-paste-ready)
-  6. posts draft + CSV to operator chat (Telegram)
-        │
-        ▼
-operator replies APPROVE  ──▶  next cron tick sends email
-                              (to: sender's FROM field only,
-                               CC: technical@consultingsubsea.com)
-```
+
+**The human gate is the architecture, not a limitation.** The agent does every mechanical step —
+poll, dedupe, fetch, validate, generate — and then stops and hands the finished work product to a
+person. Nothing leaves the building without `APPROVE`.
 
 ## Architecture — skill vs frontend
 
